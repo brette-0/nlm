@@ -1,7 +1,7 @@
 [
   {
     "name" : "neslib",
-    "url" : "https://github.com/clbr/neslib/archive/refs/heads/master.zip"
+    "url" : "https://github.com/clbr/neslib/archive/refs/heads/master.zip",
     "version" : "0.0",
     "author" : "https://github.com/clbr",
     "assembler" : "ca65"
