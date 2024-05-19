@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "${workspaceFolder}/main.cpp",  // Adjust this pattern if your source files are in subdirectories
+                "-o",
+                "${workspaceFolder}/nlm.exe",  // Output executable name
+                "-lcurl",                      // Link against libcurl
+                "-std=c++23",                  // Target C++23
+                "-Wall",                       // Enable all warnings
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Generated task for building the project with g++ and linking against libcurl."
+        }
+    ]
+}
