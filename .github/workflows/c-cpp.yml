@@ -23,7 +23,7 @@ jobs:
 
     - name: Compile the application
       run: |
-        g++ -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -std=c++23 -Wall
+        g++ -std=c++23 -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -Wall
 
     - name: Create Debian package
       run: |
@@ -72,7 +72,7 @@ jobs:
     - name: Compile the application
       shell: msys2 {0}
       run: |
-        g++ -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -std=c++23 -Wall -I C:/vcpkg/installed/x64-windows/include -L C:/vcpkg/installed/x64-windows/lib
+        g++ -std=c++23 -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -Wall -I C:/vcpkg/installed/x64-windows/include -L C:/vcpkg/installed/x64-windows/lib
 
     - name: Copy DLLs and Executable
       run: |
