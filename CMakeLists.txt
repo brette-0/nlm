@@ -21,6 +21,7 @@ add_executable(nlm ${SOURCES})
 
 # Link libraries if needed (e.g., for curl)
 find_package(CURL REQUIRED)
+find_package(nlohmann_json REQUIRED)
 target_link_libraries(nlm PRIVATE CURL::libcurl)
 
 # Install executable
