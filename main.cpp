@@ -34,7 +34,14 @@ namespace net {
 
 namespace commands {
     void list();
-    std::function<void()> commands[] = {list};
+    void remove(std::string* listing);
+    void connect(std::pair<std::string, std::string>* cdata);
+    void install(std::string* library);
+    std::function<void(void*)> commands[] = {
+        [](void* _) -> void {list();},
+        [](void* _) -> void {remove((std::string*)_);},
+        [](void* _) -> void {connect((std::pair<std::string, std::string>*)_);},
+        [](void* _) -> void {install((std::string*)_);}};
 }
 
 int main(int argc, char* args[]){    
@@ -84,11 +91,37 @@ int main(int argc, char* args[]){
     std::hash<std::string> hash_string;
 
     byte command_id;
+    void* argptr;
+    std::string argstr;
+    std::pair<std::string, std::string> argpairstr;
+
     switch ((uint64_t)hash_string(args[1])){
         case 14384129217966325695u:
         case 3719935594332938432u:
-            // for every listing inside listings.json, list every installable library
             command_id = 0;
+            break;
+
+        case 7629267266967465055u:
+        case 207937403940463093u:
+            command_id = 1;
+            if (argc == 2){
+                std::cout << "No arguement, cannot remove\n";
+                return 1;
+            }
+            argstr = std::string(args[2]);
+            argptr = &argstr;
+            break;
+        
+        case 1753817111081909669u:
+        case 9196625560755686471u:
+            command_id = 2;
+            if (argc < 4){
+                std::cout << "Too few arguements, cannot connect.\n";
+                return 1;
+            }
+
+            argpairstr = {args[2], args[3]};
+            argptr = &argpairstr;
             break;
 
         default:
@@ -96,7 +129,9 @@ int main(int argc, char* args[]){
 )";
         return 1;
     }
-    commands::commands[command_id]();
+    
+    
+    commands::commands[command_id](argptr);
 }
 
 
@@ -172,9 +207,40 @@ namespace commands {
             
             #define str(_string) library[_string].get<std::string>()
             for (const auto& library : listing){
-                std::cout << std::format<std::string>("    Name : {}\n    Author : {}\n    Assembler{}\n    Version : {}\n    Host : {}\n\n",
+                std::cout << std::format<std::string>("    Name : {}\n    Author : {}\n    Assembler : {}\n    Version : {}\n    Host : {}\n\n",
                  str("name"), str("author"), str("version"), str("assembler"), str("url")); 
             }
         }
+    }
+    
+    void remove(std::string* listing){
+        json listings = json::parse(std::ifstream(nlm + "/listings.json"));
+        
+        listings.erase(*listing);
+        std::ofstream _listings = std::ofstream(nlm + "/listings.json"); _listings << listings.dump(4);
+    }
+
+    void connect(std::pair<std::string, std::string>* cdata){
+        json listings = json::parse(std::ifstream(nlm + "/listings.json"));
+        if (listings.size())
+            if (listings.find(cdata->first) == listings.end()){ // this does NOT mean that its already connected
+                std::cout << "error, listing already connected\n";
+                return;
+            }
+
+        listings[cdata->first] = cdata->second;
+        std::ofstream buffer(nlm + "/listings.json");
+        buffer << listings.dump(4);
+        buffer.close();
+    }
+
+    void install(std::string* library){
+        if (!library->contains('/')){   // MIGRATE TO CLI HANDLER
+            // error
+            return;
+        }
+
+        std::string listing = library->substr(0, library->find('/'));
+        *library = library->substr(library->find('/')+1);
     }
 }
