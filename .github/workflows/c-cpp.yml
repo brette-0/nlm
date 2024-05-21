@@ -1,0 +1,92 @@
+name: Build and Package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++ libcurl4-openssl-dev devscripts
+
+    - name: Compile the application
+      run: |
+        g++ -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -std=c++23 -Wall
+
+    - name: Create Debian package
+      run: |
+        # Create the directory structure for the Debian package
+        mkdir -p ${GITHUB_WORKSPACE}/deb-package/usr/local/bin
+        cp ${GITHUB_WORKSPACE}/nlm.exe ${GITHUB_WORKSPACE}/deb-package/usr/local/bin/
+
+        # Create the control file for package metadata
+        mkdir -p ${GITHUB_WORKSPACE}/deb-package/DEBIAN
+        cat <<EOF > ${GITHUB_WORKSPACE}/deb-package/DEBIAN/control
+        Package: nlm
+        Version: 0.0
+        Section: base
+        Priority: optional
+        Architecture: amd64
+        Maintainer: _
+        Description: library manager for the NES/Famicom
+        EOF
+
+        # Build the Debian package
+        dpkg-deb --build ${GITHUB_WORKSPACE}/deb-package
+
+    - name: Upload Debian package
+      uses: actions/upload-artifact@v2
+      with:
+        name: nlm-debian
+        path: ${GITHUB_WORKSPACE}/deb-package.deb
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        install: >
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-curl
+          mingw-w64-x86_64-toolchain
+
+    - name: Compile the application
+      shell: msys2 {0}
+      run: |
+        g++ -g ${GITHUB_WORKSPACE}/main.cpp -o ${GITHUB_WORKSPACE}/nlm.exe -lcurl -std=c++23 -Wall
+
+    - name: Copy DLLs and Executable
+      run: |
+        mkdir -p ${GITHUB_WORKSPACE}/output
+        cp C:/msys64/mingw64/bin/libcurl-*.dll ${GITHUB_WORKSPACE}/output/
+        cp C:/msys64/mingw64/bin/libcrypto-*.dll ${GITHUB_WORKSPACE}/output/
+        cp C:/msys64/mingw64/bin/libssl-*.dll ${GITHUB_WORKSPACE}/output/
+        cp ${GITHUB_WORKSPACE}/nlm.exe ${GITHUB_WORKSPACE}/output/
+
+    - name: Create ZIP archive
+      run: |
+        powershell Compress-Archive -Path ${GITHUB_WORKSPACE}/output/* -DestinationPath ${GITHUB_WORKSPACE}/nlm.zip
+
+    - name: Upload ZIP archive
+      uses: actions/upload-artifact@v2
+      with:
+        name: nlm-windows
+        path: ${GITHUB_WORKSPACE}/nlm.zip
