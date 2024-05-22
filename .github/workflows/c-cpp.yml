@@ -1,0 +1,57 @@
+name: Build and Package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        compiler: [gcc, clang, msvc]
+        arch: [x64, x86]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev
+          sudo apt-get install -y cmake
+
+      - name: Configure and build
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -B build
+          cmake --build build
+
+      - name: Compile for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          if [[ "${{ matrix.arch }}" == "x64" ]]; then
+            cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/windows-x64.cmake
+          elif [[ "${{ matrix.arch }}" == "x86" ]]; then
+            cmake -B build -DCMAKE_TOOLCHAIN_FILE=cmake/windows-x86.cmake
+          fi
+          cmake --build build
+
+      - name: Create Debian package
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target package
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: binaries
+          path: build/*
