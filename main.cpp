@@ -2,6 +2,9 @@
 
     nlm (NES Library Manager)
 
+    - filter URL to whitelist filetype *.zip
+
+
 */
 
 
@@ -14,8 +17,9 @@
 #include <functional>
 #include <vector>
 #include <format>
+#include <cstdlib>
 
-const std::string nlm              = std::string("c:/nlm");
+const std::string nlm              = std::string("c:/nlm");     // MIGRATE TO SYSTEM ENVIRONMENT VARIABLE (install process change?)
 
 namespace fs = std::filesystem;
 using namespace nlohmann;
@@ -24,6 +28,9 @@ CURL *curl;
 CURLcode curl_code = CURLE_OK;
 
 char CURL_ERROR_BUFFER[0];
+
+inline void unzip(std::string& target);
+inline void mv(std::pair<std::string, std::string> task);
 
 namespace net {
     size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp);
@@ -79,6 +86,8 @@ int main(int argc, char* args[]){
 { "default" : "https://raw.githubusercontent.com/brette-0/nlm/main/listing.default.json"
 })";
         std::ofstream installed = std::ofstream(nlm + "/installed.json");
+        fs::create_directory(nlm + "/libs");
+        fs::create_directory(nlm + "/configs");
         installed << R"({})";
         installed.close();
     }
@@ -240,7 +249,92 @@ namespace commands {
             return;
         }
 
-        std::string listing = library->substr(0, library->find('/'));
+        std::string _listing = library->substr(0, library->find('/'));
+        json listing;
         *library = library->substr(library->find('/')+1);
+
+        json listings = json::parse(std::ifstream(nlm + "/listings.json"));
+        if (listings.empty()){
+            // return error message;
+            return;
+        }
+
+        try {
+            // target = listings[listing]
+            listing = json::parse(net::download(listings[_listing]));
+        } catch (const json::exception& e){
+            // return 'index' error message
+            return;
+        }
+
+        if (listing.empty()){
+            // we will assume this isn't the user's fault and report that there might be a mistake on the repository etc...
+        } else if (listing.find(*library) == listing.end()){
+            // user error, the library name is probably wrong.
+        }
+
+        // otherwise pull library, via curl  (maybe git later idk)
+
+        json _library = json::parse(net::download(*library));
+        
+        // installation process:
+        if (!fs::exists(nlm + "/temp/")) fs::create_directory(nlm + "/temp");
+        if (net::download(_library["url"], nlm + "/temp")){
+            // error cant get file
+            fs::remove_all(nlm + "/temp");
+        }
+        // deduct filename
+        std::string filename = _library["url"].get<std::string>().substr(_library["url"].get<std::string>().find_last_of('/'+1));
+
+        // install assembler path if assembler path not installed
+        if (!fs::exists(nlm + "/libs/" + _library["assembler"].get<std::string>())) fs::create_directory(nlm + "/libs" + _library["assembler"].get<std::string>());
+        
+        // create lvalue for unzip method (may adapt)
+        std::string _ = fs::path(nlm + "/temp/" + filename).string();
+        unzip(_);
+
+        fs::remove(nlm + "/temp/" + filename); // delete zip
+        filename = filename.substr(0,filename.find_last_of(".")) + '/'; // folder name is based of filename
+
+        if (_library["config"] != "null")
+            // nlm/temp/neslib/[config]
+            if (fs::exists(nlm + "/temp/" + filename + _library["config"].get<std::string>())){
+                std::pair<std::string, std::string> _ = {nlm + "/temp/" + _library["config"].get<std::string>(), nlm + "/config/" + _library["name"].get<std::string>()};
+                mv(_);
+                std::cout << R"(this library uses configuration files, in order to configure a library ensure that you use : './nlm --configure path/to/proj/libs libname'
+then ensure that you code like the below:
+; include lib dependencies
+.include "configs/libname"
+
+; include lib
+.include "assembler/libname.asm"
+)";
+            } else{
+                std::cerr << "cannot copy config file for " << _library["name"].get<std::string>() << ", config path cannot be found.\n";
+                return;
+            }
+
+        // target source file within path
+        // should work even if source is a path
+        std::string _tarpath = nlm + "/libs/" + _library["assembler"].get<std::string>() + _library["name"].get<std::string>();
+        std::string _srcpath = nlm + "/temp/" + filename + _library["source"].get<std::string>();
+        mv({_srcpath, _tarpath});
+    
     }
+}
+
+
+inline void unzip(std::string& target) {
+    #ifdef _WIN32
+    system(("tar -xvf " + target).c_str());
+    #else
+    system(("unzip " + target).c_str());
+    #endif
+    return;
+}
+
+inline void mv(std::pair<std::string, std::string> task) {
+    fs::path source(task.first);
+    fs::path target(task.second);
+    fs::rename(source, target);
 }

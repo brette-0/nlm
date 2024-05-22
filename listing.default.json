@@ -4,13 +4,17 @@
     "url" : "https://github.com/clbr/neslib/archive/refs/heads/master.zip",
     "version" : "0.0",
     "author" : "https://github.com/clbr",
-    "assembler" : "ca65"
+    "assembler" : "ca65",
+    "source" : "",
+    "config" : null
   },
   {
     "name" : "nesbrette",
     "url" : "https://github.com/brette-0/nesbrette/archive/refs/heads/main.zip",
     "version" : "0.0",
     "author" : "https://github.com/brette-0",
-    "assembler" : "ca65"
+    "assembler" : "ca65",
+    "source" : "",
+    "config" : null
   }
 ]
