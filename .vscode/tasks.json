@@ -11,6 +11,7 @@
                 "-o",
                 "${workspaceFolder}/nlm.exe",  // Output executable name
                 "-lcurl",                      // Link against libcurl
+                "-lgit2",
                 "-std=c++23",                  // Target C++23
                 "-Wall",                       // Enable all warnings
             ],

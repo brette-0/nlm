@@ -19,6 +19,14 @@
 #include <format>
 #include <cstdlib>
 
+#include <git2/global.h>
+#include <git2/clone.h>
+
+// debug
+
+#include <git2/errors.h>
+#include <git2/common.h>
+
 const std::string nlm              = std::string("c:/nlm");     // MIGRATE TO SYSTEM ENVIRONMENT VARIABLE (install process change?)
 
 namespace fs = std::filesystem;
@@ -29,7 +37,7 @@ CURLcode curl_code = CURLE_OK;
 
 char CURL_ERROR_BUFFER[0];
 
-inline void unzip(std::string& target);
+void rw(const std::string& tar);
 inline void mv(std::pair<std::string, std::string> task);
 
 namespace net {
@@ -52,16 +60,11 @@ namespace commands {
 }
 
 int main(int argc, char* args[]){    
-
-    curl = curl_easy_init();
-    if (!curl){
-        // bla bla bla error
-        return 1;
-    }
-
-    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, CURL_ERROR_BUFFER);
-
     // check for files existing
+    if (fs::exists(nlm + "/temp/")){
+        rw(nlm + "/temp");
+        fs::remove_all(nlm + "/temp");
+    }
     if (!fs::exists(nlm)){
     
         std::cout << "required nlm directory missing, would you like to create one? [default = Y] (Y/N) : ";
@@ -137,6 +140,10 @@ int main(int argc, char* args[]){
         case 6849809912359275844u:
             command_id = 3;
             argstr = std::string(args[2]);
+            if (!argstr.contains('/')){
+                std::cerr << "listing must be specified!\n";
+                return 1;
+            }
             argptr = &argstr;
             break;
 
@@ -162,8 +169,17 @@ namespace net {
 
     bool download(std::string target_url, std::string target_path){
         std::ofstream target = std::ofstream(target_path, std::ios::binary);
+        curl = curl_easy_init();
+        if (!curl){
+            // bla bla bla error
+            return 1;
+        }
+
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, CURL_ERROR_BUFFER);
+
 
         curl_easy_setopt(curl, CURLOPT_URL, target_url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, net::WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &target);
 
         curl_code = curl_easy_perform(curl);
@@ -181,19 +197,22 @@ namespace net {
 
     std::vector<byte> download(const std::string& url) {
         std::vector<byte> buffer;
-        if(!curl) {
+        curl = curl_easy_init();
+        if (!curl){
+            // bla bla bla error
             return {};
-        } else {
-            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, net::WriteCallback_nofstream);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-            curl_code = curl_easy_perform(curl);
-            if(curl_code != CURLE_OK) {
-                curl_easy_cleanup(curl);
-                return {};
-            }
-            curl_easy_cleanup(curl);
         }
+
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, CURL_ERROR_BUFFER);
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, net::WriteCallback_nofstream);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
+        curl_code = curl_easy_perform(curl);
+        if(curl_code != CURLE_OK) {
+            curl_easy_cleanup(curl);
+            return {};
+        }
+        curl_easy_cleanup(curl);
         return buffer;
     }
 
@@ -251,11 +270,6 @@ namespace commands {
     }
 
     void install(std::string* library){
-        if (!library->contains('/')){   // MIGRATE TO CLI HANDLER
-            // error
-            return;
-        }
-
         std::string _listing = library->substr(0, library->find('/'));
         json listing;
         *library = library->substr(library->find('/')+1);
@@ -280,36 +294,27 @@ namespace commands {
             // user error, the library name is probably wrong.
         }
 
-        // otherwise pull library, via curl  (maybe git later idk)
+        if (!fs::exists(nlm + "/temp")) fs::create_directory(nlm + "/temp");
 
-        json _library = json::parse(net::download(listing[*library]["url"].get<std::string>()));
 
-        std::clog << "downloaded " << _library["name"].get<std::string>() << '\n';
-        return;
-
-        // installation process:
-        if (!fs::exists(nlm + "/temp/")) fs::create_directory(nlm + "/temp");
-        if (net::download(_library["url"], nlm + "/temp")){
-            // error cant get file
-            fs::remove_all(nlm + "/temp");
+        if (git_libgit2_init()){
+            // report init failure and leave
         }
-        // deduct filename
-        std::string filename = _library["url"].get<std::string>().substr(_library["url"].get<std::string>().find_last_of('/'+1));
 
-        // install assembler path if assembler path not installed
-        if (!fs::exists(nlm + "/libs/" + _library["assembler"].get<std::string>())) fs::create_directory(nlm + "/libs" + _library["assembler"].get<std::string>());
+        git_clone_options libgit_opts = GIT_CLONE_OPTIONS_INIT;
+        git_repository* repo = nullptr;
+
+        if (git_clone(&repo, listing[*library]["url"].get<std::string>().c_str(), (nlm + "/temp").c_str(), &libgit_opts)){
+            std::cerr << "Error cloning repository: " << git_error_last()->message << '\n';
+            return;
+        }
+        if (!fs::exists(nlm + "/libs/" +listing[*library]["assembler"].get<std::string>())) fs::create_directory(nlm + "/libs/" + listing[*library]["assembler"].get<std::string>());
         
-        // create lvalue for unzip method (may adapt)
-        std::string _ = fs::path(nlm + "/temp/" + filename).string();
-        unzip(_);
-
-        fs::remove(nlm + "/temp/" + filename); // delete zip
-        filename = filename.substr(0,filename.find_last_of(".")) + '/'; // folder name is based of filename
-
-        if (_library["config"] != "null") {
+        //test with nesbrette
+        if (!listing[*library]["config"].is_null()) {
             // nlm/temp/neslib/[config]
-            if (fs::exists(nlm + "/temp/" + filename + _library["config"].get<std::string>())){
-                std::pair<std::string, std::string> _ = {nlm + "/temp/" + _library["config"].get<std::string>(), nlm + "/config/" + _library["name"].get<std::string>()};
+            if (fs::exists(nlm + "/temp/" + listing[*library]["config"].get<std::string>())){
+                std::pair<std::string, std::string> _ = {nlm + "/temp/" + listing[*library]["config"].get<std::string>(), nlm + "/config/" + listing[*library]["name"].get<std::string>()};
                 mv(_);
                 std::cout << R"(this library uses configuration files, in order to configure a library ensure that you use : './nlm --configure path/to/proj/libs libname'
 then ensure that you code like the below:
@@ -319,32 +324,32 @@ then ensure that you code like the below:
 ; include lib
 .include "assembler/libname.asm"
 )";
-            } else{
-                std::cerr << "cannot copy config file for " << _library["name"].get<std::string>() << ", config path cannot be found.\n";
-                return;
             }
         }
+
+
+        // installation process:
+        
         // target source file within path
         // should work even if source is a path
-        std::string _tarpath = nlm + "/libs/" + _library["assembler"].get<std::string>() + _library["name"].get<std::string>();
-        std::string _srcpath = nlm + "/temp/" + filename + _library["source"].get<std::string>();
+        std::string _tarpath = nlm + "/libs/" + listing[*library]["assembler"].get<std::string>() + '/' + listing[*library]["name"].get<std::string>();
+        if (!fs::exists(_tarpath)) fs::create_directories(_tarpath);
+        std::string _srcpath = nlm + "/temp/";
         mv({_srcpath, _tarpath});
-    
     }
-}
-
-
-inline void unzip(std::string& target) {
-    #ifdef _WIN32
-    system(("tar -xvf " + target).c_str());
-    #else
-    system(("unzip " + target).c_str());
-    #endif
-    return;
 }
 
 inline void mv(std::pair<std::string, std::string> task) {
     fs::path source(task.first);
     fs::path target(task.second);
     fs::rename(source, target);
+}
+
+void rw(const std::string& tar) {
+    std::cout << std::format("attrib -r {}/*.* /s", tar).c_str() << '\n';
+    #ifdef _WIN32
+        system(std::format("attrib -r {}/*.* /s", tar).c_str());
+    #else
+        system(("chmod -R -v a-w " + tar).c_str()); // i wish linux luck
+    #endif
 }
