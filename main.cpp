@@ -133,6 +133,13 @@ int main(int argc, char* args[]){
             argptr = &argpairstr;
             break;
 
+        case 4515630727894863556u:
+        case 6849809912359275844u:
+            command_id = 3;
+            argstr = std::string(args[2]);
+            argptr = &argstr;
+            break;
+
         default:
             std::cout << R"(couldn't recognize that command, please use : 'nlm -h' or 'nlm --help' to see commands
 )";
@@ -275,8 +282,11 @@ namespace commands {
 
         // otherwise pull library, via curl  (maybe git later idk)
 
-        json _library = json::parse(net::download(*library));
-        
+        json _library = json::parse(net::download(listing[*library]["url"].get<std::string>()));
+
+        std::clog << "downloaded " << _library["name"].get<std::string>() << '\n';
+        return;
+
         // installation process:
         if (!fs::exists(nlm + "/temp/")) fs::create_directory(nlm + "/temp");
         if (net::download(_library["url"], nlm + "/temp")){
@@ -296,7 +306,7 @@ namespace commands {
         fs::remove(nlm + "/temp/" + filename); // delete zip
         filename = filename.substr(0,filename.find_last_of(".")) + '/'; // folder name is based of filename
 
-        if (_library["config"] != "null")
+        if (_library["config"] != "null") {
             // nlm/temp/neslib/[config]
             if (fs::exists(nlm + "/temp/" + filename + _library["config"].get<std::string>())){
                 std::pair<std::string, std::string> _ = {nlm + "/temp/" + _library["config"].get<std::string>(), nlm + "/config/" + _library["name"].get<std::string>()};
@@ -313,7 +323,7 @@ then ensure that you code like the below:
                 std::cerr << "cannot copy config file for " << _library["name"].get<std::string>() << ", config path cannot be found.\n";
                 return;
             }
-
+        }
         // target source file within path
         // should work even if source is a path
         std::string _tarpath = nlm + "/libs/" + _library["assembler"].get<std::string>() + _library["name"].get<std::string>();
