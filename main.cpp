@@ -308,6 +308,10 @@ namespace commands {
             std::cerr << "Error cloning repository: " << git_error_last()->message << '\n';
             return;
         }
+
+        git_libgit2_shutdown();
+
+        rw(nlm + "/temp"); // allow file moves
         if (!fs::exists(nlm + "/libs/" +listing[*library]["assembler"].get<std::string>())) fs::create_directory(nlm + "/libs/" + listing[*library]["assembler"].get<std::string>());
         
         //test with nesbrette
@@ -333,8 +337,8 @@ then ensure that you code like the below:
         // target source file within path
         // should work even if source is a path
         std::string _tarpath = nlm + "/libs/" + listing[*library]["assembler"].get<std::string>() + '/' + listing[*library]["name"].get<std::string>();
-        if (!fs::exists(_tarpath)) fs::create_directories(_tarpath);
-        std::string _srcpath = nlm + "/temp/";
+        //if (!fs::exists(_tarpath)) fs::create_directories(_tarpath);
+        std::string _srcpath = nlm + "/temp";
         mv({_srcpath, _tarpath});
     }
 }
@@ -342,13 +346,14 @@ then ensure that you code like the below:
 inline void mv(std::pair<std::string, std::string> task) {
     fs::path source(task.first);
     fs::path target(task.second);
-    fs::rename(source, target);
+    std::error_code ec;
+    fs::rename(source, target, ec);
+    if (ec) std::clog << ec << '\n';
 }
 
 void rw(const std::string& tar) {
-    std::cout << std::format("attrib -r {}/*.* /s", tar).c_str() << '\n';
     #ifdef _WIN32
-        system(std::format("attrib -r {}/*.* /s", tar).c_str());
+        system(std::format("attrib -r -h {}/*.* /s", tar).c_str());
     #else
         system(("chmod -R -v a-w " + tar).c_str()); // i wish linux luck
     #endif
